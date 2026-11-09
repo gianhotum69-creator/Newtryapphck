@@ -2,7 +2,6 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -12,24 +11,50 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      - name: Auto-locate and extract project files
+        run: |
+          echo "Scanning repository files..."
+          ls -la
+
+          # Agar zip upload hui hai toh automatically unzip karein
+          if [ ! -f "build.gradle" ] && ls *.zip 1> /dev/null 2>&1; then
+            echo "Extracting zip file..."
+            unzip -o *.zip
+          fi
+
+          # Agar files kisi subfolder ke andar hain toh root me layein
+          if [ ! -f "build.gradle" ]; then
+            SUB_DIR=$(find . -name "build.gradle" -not -path "*/app/*" -exec dirname {} \; | head -n 1)
+            if [ -n "$SUB_DIR" ] && [ "$SUB_DIR" != "." ]; then
+              echo "Moving files from subfolder $SUB_DIR to root..."
+              shopt -s dotglob
+              mv "$SUB_DIR"/* . || true
+              shopt -u dotglob
+            fi
+          fi
+
+          echo "Files ready for build:"
+          ls -la
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
 
       - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+        run: chmod +x gradlew || true
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: |
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: BS_STORE_VIP_PANEL-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: '**/build/outputs/apk/debug/*.apk'
