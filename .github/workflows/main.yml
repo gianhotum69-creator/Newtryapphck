@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK from HTML & Assets
 
 on:
   push:
@@ -8,33 +8,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source code
+      - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Auto-locate and extract project files
-        run: |
-          echo "Scanning repository files..."
-          ls -la
-
-          # Agar zip upload hui hai toh automatically unzip karein
-          if [ ! -f "build.gradle" ] && ls *.zip 1> /dev/null 2>&1; then
-            echo "Extracting zip file..."
-            unzip -o *.zip
-          fi
-
-          # Agar files kisi subfolder ke andar hain toh root me layein
-          if [ ! -f "build.gradle" ]; then
-            SUB_DIR=$(find . -name "build.gradle" -not -path "*/app/*" -exec dirname {} \; | head -n 1)
-            if [ -n "$SUB_DIR" ] && [ "$SUB_DIR" != "." ]; then
-              echo "Moving files from subfolder $SUB_DIR to root..."
-              shopt -s dotglob
-              mv "$SUB_DIR"/* . || true
-              shopt -u dotglob
-            fi
-          fi
-
-          echo "Files ready for build:"
-          ls -la
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -42,19 +17,207 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew || true
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Bootstrap Full Android Native Project
+        run: |
+          # 1. Android Folder Structure Create Karein
+          mkdir -p app/src/main/java/com/bsstore/vippanel
+          mkdir -p app/src/main/assets
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/mipmap-xxhdpi
+
+          # 2. HTML file ko assets me index.html ke roop me copy karein
+          if [ -f "mizanmod.html" ]; then
+            cp mizanmod.html app/src/main/assets/index.html
+          elif ls *.html 1> /dev/null 2>&1; then
+            FIRST_HTML=$(ls *.html | head -n 1)
+            cp "$FIRST_HTML" app/src/main/assets/index.html
+          fi
+
+          # 3. DiskWala.zip ke sare 27 assets unpackage karein
+          if ls *.zip 1> /dev/null 2>&1; then
+            for z in *.zip; do
+              unzip -o "$z" -d app/src/main/assets/ || true
+            done
+          fi
+
+          # Root images aur mp3 assets me dalein
+          cp -f *.png *.mp3 *.jpg *.ttf *.otf *.json app/src/main/assets/ 2>/dev/null || true
+
+          # App Icon setup
+          if [ -f "app/src/main/assets/my_icon.png" ]; then
+            cp -f app/src/main/assets/my_icon.png app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+            cp -f app/src/main/assets/my_icon.png app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
+          fi
+
+          # 4. Settings.gradle
+          cat << 'EOF' > settings.gradle
+          rootProject.name = "BSStoreVIP"
+          include ':app'
+          EOF
+
+          # 5. Root build.gradle
+          cat << 'EOF' > build.gradle
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.3.2'
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+
+          # 6. gradle.properties
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.enableJetifier=true
+          EOF
+
+          # 7. app/build.gradle
+          cat << 'EOF' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.bsstore.vippanel'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.bsstore.vippanel"
+                  minSdk 21
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'androidx.webkit:webkit:1.10.0'
+          }
+          EOF
+
+          # 8. AndroidManifest.xml
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.bsstore.vippanel">
+
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+              <uses-permission android:name="android.permission.VIBRATE" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+              <application
+                  android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
+                  android:label="@string/app_name"
+                  android:roundIcon="@mipmap/ic_launcher_round"
+                  android:supportsRtl="true"
+                  android:hardwareAccelerated="true"
+                  android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:screenOrientation="portrait"
+                      android:configChanges="orientation|screenSize|keyboardHidden"
+                      android:windowSoftInputMode="adjustResize">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          # 9. MainActivity.java (Native Android WebView)
+          cat << 'EOF' > app/src/main/java/com/bsstore/vippanel/MainActivity.java
+          package com.bsstore.vippanel;
+
+          import android.annotation.SuppressLint;
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+
+          public class MainActivity extends Activity {
+              private WebView webView;
+
+              @SuppressLint("SetJavaScriptEnabled")
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  webView = new WebView(this);
+                  setContentView(webView);
+
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setDatabaseEnabled(true);
+                  settings.setAllowFileAccess(true);
+                  settings.setAllowContentAccess(true);
+                  settings.setMediaPlaybackRequiresUserGesture(false);
+                  settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+
+                  webView.setWebViewClient(new WebViewClient());
+                  webView.loadUrl("file:///android_asset/index.html");
+              }
+
+              @Override
+              public void onBackPressed() {
+                  if (webView != null && webView.canGoBack()) {
+                      webView.goBack();
+                  } else {
+                      super.onBackPressed();
+                  }
+              }
+          }
+          EOF
+
+          # 10. strings.xml
+          cat << 'EOF' > app/src/main/res/values/strings.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">BS Store VIP Panel</string>
+          </resources>
+          EOF
+
+          # 11. Setup Gradle wrapper
+          gradle wrapper --gradle-version 8.7
 
       - name: Build Debug APK
         run: |
-          if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug --stacktrace
-          else
-            gradle assembleDebug --stacktrace
-          fi
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
 
-      - name: Upload Debug APK Artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: BS_STORE_VIP_PANEL-debug-apk
-          path: '**/build/outputs/apk/debug/*.apk'
+          path: app/build/outputs/apk/debug/app-debug.apk
