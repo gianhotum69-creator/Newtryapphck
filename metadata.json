@@ -1,0 +1,6 @@
+{
+  "name": "Web to APK Studio",
+  "description": "Convert HTML, CSS, and JavaScript into complete Android APK projects with live mobile preview, icon customizer, and 1-click cloud build.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
