@@ -17,36 +17,33 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Bootstrap Full Android Native Project
         run: |
-          # 1. Android Folder Structure Create Karein
+          # 1. Android Directory Structure Create Karein
           mkdir -p app/src/main/java/com/bsstore/vippanel
           mkdir -p app/src/main/assets
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/mipmap-xxhdpi
 
-          # 2. HTML file ko assets me index.html ke roop me copy karein
+          # 2. HTML file ko assets me index.html ke roop me dalein
           if [ -f "mizanmod.html" ]; then
-            cp mizanmod.html app/src/main/assets/index.html
+            cp -f mizanmod.html app/src/main/assets/index.html
           elif ls *.html 1> /dev/null 2>&1; then
             FIRST_HTML=$(ls *.html | head -n 1)
-            cp "$FIRST_HTML" app/src/main/assets/index.html
+            cp -f "$FIRST_HTML" app/src/main/assets/index.html
           fi
 
-          # 3. DiskWala.zip ke sare 27 assets unpackage karein
+          # 3. DiskWala.zip ke sare 27 assets extract karein
           if ls *.zip 1> /dev/null 2>&1; then
             for z in *.zip; do
               unzip -o "$z" -d app/src/main/assets/ || true
             done
           fi
 
-          # Root images aur mp3 assets me dalein
+          # Root images aur mp3 files assets me copy karein
           cp -f *.png *.mp3 *.jpg *.ttf *.otf *.json app/src/main/assets/ 2>/dev/null || true
 
-          # App Icon setup
+          # App Launcher Icon
           if [ -f "app/src/main/assets/my_icon.png" ]; then
             cp -f app/src/main/assets/my_icon.png app/src/main/res/mipmap-xxhdpi/ic_launcher.png
             cp -f app/src/main/assets/my_icon.png app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
@@ -155,7 +152,7 @@ jobs:
           </manifest>
           EOF
 
-          # 9. MainActivity.java (Native Android WebView)
+          # 9. MainActivity.java
           cat << 'EOF' > app/src/main/java/com/bsstore/vippanel/MainActivity.java
           package com.bsstore.vippanel;
 
@@ -208,13 +205,26 @@ jobs:
           </resources>
           EOF
 
-          # 11. Setup Gradle wrapper
-          gradle wrapper --gradle-version 8.7
+          # 11. Gradle wrapper
+          mkdir -p gradle/wrapper
+          cat << 'EOF' > gradle/wrapper/gradle-wrapper.properties
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-bin.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+
+          gradle wrapper --gradle-version 8.7 || true
 
       - name: Build Debug APK
         run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          chmod +x gradlew || true
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
